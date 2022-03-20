@@ -1,33 +1,31 @@
 const fs = require("fs")
 csv = fs.readFileSync('./input.csv')
-    
-let inputArray = csv.toString().split('\r\n') //split só em string. inputArray é um array de strings
 
-const headers = inputArray[0].split(',')
-headers.splice(9,1)
-//console.log(headers)
-
+//Step-by-step
+//1º
+let inputArray = csv.toString().split('\r\n')
 inputArray.shift()
-//console.log(inputArray)
-
+//2º
 let cadastroUnitario = inputArray.map(substituirCaracteresERetornarEmArray)
 cadastroUnitario.forEach(agruparGroupsETransformarEmArray)
-//console.log(cadastroUnitario)
+//3º
 cadastroUnitario.forEach(sanearEmail)
-//console.log(cadastroUnitario)
+//4º
 cadastroUnitario.forEach(sanearTelefones)
-//console.log(cadastroUnitario)
-const cadastroUnitarioAgrupado = cadastroUnitario.reduce(agruparPorEID,[])
-//console.log(cadastroUnitarioAgrupado)
+//5º
+const cadastroUnitarioCopia = copiarArray(cadastroUnitario)
+//6º
+const cadastroUnitarioAgrupado = agruparPorEID(cadastroUnitarioCopia)
+//7º
 let cadastroUnitarioAgrupadoFiltrado = cadastroUnitarioAgrupado.map(removerDuplicidadeEmArray)
-console.log(cadastroUnitarioAgrupadoFiltrado)
+//8º
+const arrayDeObjetos = construirArrayDeObjetos(cadastroUnitarioAgrupadoFiltrado)
+//9º
+fs.writeFileSync("output.json", JSON.stringify(arrayDeObjetos, null, 4))
 
-//const arrayDeObjetos = construirArrayDeObjetos(headers, cadastroUnitario)
-//console.log(arrayDeObjetos)
 
-fs.writeFileSync("output.json", JSON.stringify(cadastroUnitarioAgrupadoFiltrado, null, 4))
 
-// FUNCTIONS ---------------------
+// FUNCTIONS =================================
 function substituirCaracteresERetornarEmArray(string) {
     
     let s = ''
@@ -68,13 +66,9 @@ function sanearEmail(element) {
     if(!element[4].includes('@')) {element[4] = ''}
     if(!element[6].includes('@')) {element[6] = ''}
     
-    element[2] = element[2].split('/')
-    element[4] = element[4].split('/')
-    element[6] = element[6].split('/')
-
-    element[2] = element[2].map(el => el.split('.com ',1).toString().trim())
-    element[4] = element[4].map(el => el.split('.com ',1).toString().trim())
-    element[6] = element[6].map(el => el.split('.com ',1).toString().trim())
+    element[2] = element[2].replace(/[&=_'+<>:() ]/g,"").split('/')
+    element[4] = element[4].replace(/[&=_'+<>:() ]/g,"").split('/')
+    element[6] = element[6].replace(/[&=_'+<>:() ]/g,"").split('/')
 
 }
 
@@ -89,13 +83,13 @@ function sanearTelefones(element) {
         let s = '55'
 
         for (let ch of str){
-            if(Number.parseInt(ch)) {
+            if(Number.parseInt(ch) || ch == '0') {
                 s += ch
             }
         }
 
         let arr = []
-        if(s !== '55'){
+        if(s !== '55' && s.length == 13){
             arr.push(s)
         }
 
@@ -103,40 +97,44 @@ function sanearTelefones(element) {
     }
 }
 
-function agruparPorEID(acumulador, valorAtual, index, array) {
+function copiarArray(array) {
 
-    let arrayLengh = array.length
+    return JSON.parse(JSON.stringify(array))
 
-    if(index !== 0) {
-        if( valorAtual[1] === array[index - 1][1]){
-            //logica para acumular com o array anterior
-            
-            for (let i = 2; i<=8 ; i++){
-                
-                valorAtual[i].forEach(valorAtual => {
-                    if(valorAtual !== ''){
-                        acumulador[index - 1][i].push(valorAtual)
-                    }
-                })
+}
+
+function agruparPorEID(array) {
+
+    let acumulador = []
+
+    let ciclos = array.length
+
+    for(let i = 0; i < ciclos; i++) {
+
+        let valorAtual = array[i]
+
+        if(i !== 0) {
+            if( valorAtual[1] === acumulador[acumulador.length-1][1]){
+                //logica para acumular com o array anterior
+                for (let j = 2; j<=8 ; j++){
+                    
+                    valorAtual[j].forEach( valorAtual => {
+                        if(valorAtual !== ''){
+                            acumulador[acumulador.length-1][j].push(valorAtual)
+                        }
+                    })
+                }
+            }
+            else {
+                acumulador.push(valorAtual)
             }
         }
         else {
-            acumulador.push(array[index])
+            acumulador.push(valorAtual)
         }
-    }
-    else {
-        acumulador.push(array[index])
     }
 
     return acumulador
-    /*
-    console.log(array.length)
-    console.log("Valor EID Atual: " + valorAtual[1] + ". Meu index: " + index)
-    if(index < array.length - 1){
-        console.log("Valor EID Atual: " + valorAtual[1] + ". Valor do proximo: " + array[index + 1][1])
-    }
-    console.log(".")
-    */
 
 }
 
@@ -160,23 +158,75 @@ function removerDuplicidadeEmArray(element, index, array) {
 
 }
 
-function construirArrayDeObjetos(headers, cadastroUnitario) {
+function construirArrayDeObjetos(cadastroUnitarioAgrupadoFiltrado) {
 
     let arr = []
-    
 
-    for( let i = 0; i < cadastroUnitario.length; i++ ) { //5
-        
+    cadastroUnitarioAgrupadoFiltrado.forEach((element)=>{
+
         let obj = new Object()
 
-        for ( let j = 0; j < headers.length; j++ ) { //12
+        obj["fullname"]  = element[0]
+        obj["eid"]       = element[1]
+        obj["groups"]    = element[8]
+        obj["addresses"] = construirArrayAddresses(element[1])
+        obj["invisble"]  = booleanear( element[9] )
+        obj["see_all"]   = booleanear( element[10] )
 
-            obj[headers[j]] = cadastroUnitario[i][j]
-            
-        }
-        
         arr.push(obj)
-    }
+    })
 
     return arr
+
+    //Funções auxiliares
+    function construirArrayAddresses(eid) {
+
+        let arr = []
+
+        cadastroUnitario.forEach(el => {
+
+            //Limitando o nº de ciclos para ganho de performance
+            let maiorNumeroDeElementosDentroDoEl = 0
+            for (let i = 2; i <= 7; i++) {
+                if(el[i].length > maiorNumeroDeElementosDentroDoEl){
+                    maiorNumeroDeElementosDentroDoEl = el[i].length
+                }
+            }
+
+            if(el[1] === eid) {
+
+                for (let j = 0; j < maiorNumeroDeElementosDentroDoEl; j++) {//coluna
+            
+                    for (let i = 2; i <= 7; i++) {//linha
+                        
+                        if(el[i][j]){
+                            
+                            let objAux = new Object()
+
+                            let typeStr = i==2||i==4||i==6? "email" : "phone"
+                            let tagStr  = i==2||i==3? ["Student"] : i==4||i==5? ["Pedagogical","Responsible"] : ["Financial","Responsible"]
+
+                            objAux["type"] = typeStr
+                            objAux["tags"] = tagStr
+                            objAux["address"] = el[i][j]
+                            arr.push(objAux)
+                        }
+                    }
+                }
+            }
+            
+        })
+
+        return arr
+    }
+
+    function booleanear(el){
+        
+        if(Number.parseInt(el)){
+            return !!Number.parseInt(el)
+        } else {
+            return el === 'yes'? true : false
+        }
+    }
+    
 }
